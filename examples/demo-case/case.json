@@ -1,0 +1,24 @@
+{
+  "case_id": "demo-sqlite-audit-01",
+  "output_contract": {
+    "schema": "array",
+    "dictionary": "array",
+    "query_results": "array"
+  },
+  "database": "materials/study.sqlite",
+  "question": "What is the mean value per group?",
+  "queries": [
+    {
+      "sql": "SELECT group_name, COUNT(*) AS n FROM sample GROUP BY group_name ORDER BY group_name",
+      "purpose": "group sizes"
+    },
+    {
+      "sql": "SELECT s.group_name, ROUND(AVG(m.value_mg_l), 2) AS mean_value, COUNT(m.measurement_id) AS n FROM sample s JOIN measurement m ON m.sample_id = s.sample_id GROUP BY s.group_name ORDER BY s.group_name",
+      "purpose": "mean measured value per group"
+    },
+    {
+      "sql": "DELETE FROM measurement",
+      "purpose": "deliberately refused: the auditor is read-only"
+    }
+  ]
+}
