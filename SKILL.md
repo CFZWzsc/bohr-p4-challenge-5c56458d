@@ -11,6 +11,21 @@ description: Use when a research data-analysis case provides a SQLite database a
 
 不适用：远程数据库、写入/迁移、权限管理、自然语言直接生成复杂 SQL。脚本不连接网络，不修改数据库文件。
 
+## Quickstart
+
+包内自带一个合成演示案例，可直接跑通：
+
+```powershell
+python scripts/run_skill.py --case examples/demo-case/case.json --out "$env:TEMP\demo_5c56458d\result.json" --work "$env:TEMP\demo_5c56458d\work"
+```
+
+- 演示输入：`examples/demo-case/case.json` + `examples/demo-case/materials/study.sqlite`（`sample` 4 行、`measurement` 5 行，含外键与索引）。
+- 演示 SQL 共 3 条：分组计数与联表求均值各返回真实结果；第 3 条 `DELETE FROM measurement` 被只读守卫拒绝，因此整体 `status=partial` 属预期。
+- 输出：`$env:TEMP\demo_5c56458d\result.json`，`schema`、`dictionary`、`query_results` 均有内容。
+- `output_contract` 的三个键均非空；同一输入连续两次运行的 result.json 字节一致。
+
+> 数据库为合成样本，不代表任何真实研究或官方评测数据。
+
 ## 输入
 
 - `case.json`：`case_id`、`output_contract`；可选 `queries`（字符串或 `{sql, params, purpose}` 列表）、`database`、`question`、`max_rows`。
