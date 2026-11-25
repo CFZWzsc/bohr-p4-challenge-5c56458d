@@ -19,6 +19,7 @@ answers, private data or credentials are included.
 | `SKILL.md` |
 | `examples/demo-case/case.json` |
 | `examples/demo-case/materials/study.sqlite` |
+| `scripts/report_kit.py` |
 | `scripts/run_skill.py` |
 | `README.md` |
 
