@@ -13,8 +13,12 @@
       "purpose": "group sizes"
     },
     {
+      "sql": "SELECT s.sample_id, s.group_name, m.measurement_id, m.value_mg_l, m.value_text FROM sample s JOIN measurement m ON m.sample_id = s.sample_id ORDER BY s.sample_id, m.measurement_id",
+      "purpose": "plain join without aggregation: duplicates sample rows and mixes units"
+    },
+    {
       "sql": "SELECT s.group_name, ROUND(AVG(m.value_mg_l), 2) AS mean_value, COUNT(m.measurement_id) AS n FROM sample s JOIN measurement m ON m.sample_id = s.sample_id GROUP BY s.group_name ORDER BY s.group_name",
-      "purpose": "mean measured value per group"
+      "purpose": "mean normalised value per group (aggregated, no fan-out)"
     },
     {
       "sql": "DELETE FROM measurement",
