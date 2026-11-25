@@ -19,16 +19,16 @@ description: Use when a research data-analysis case provides a SQLite database a
 python scripts/run_skill.py --case examples/demo-case/case.json --out "$env:TEMP\demo_5c56458d\result.json" --work "$env:TEMP\demo_5c56458d\work"
 ```
 
-- 演示输入：`examples/demo-case/case.json` + `examples/demo-case/materials/study.sqlite`（`sample` 4 行、`measurement` 5 行，含外键与索引）。
-- 演示 SQL 共 3 条：分组计数与联表求均值各返回真实结果；第 3 条 `DELETE FROM measurement` 被只读守卫拒绝，因此整体 `status=partial` 属预期。
+- 演示输入：`examples/demo-case/case.json` + `examples/demo-case/materials/study.sqlite`（`sample` 4 行、`measurement` 6 行，含外键与索引；`value_text` 以文本混存 `mg/L` 与 `ug/mL` 两种单位，`value_mg_l` 为归一化数值副本，设计说明见 `dataset_note` 表）。
+- 演示 SQL 共 4 条：分组计数、未聚合联表（触发 `possible_join_fanout`）、按样本先聚合再求组均值（合法）、`DELETE FROM measurement` 被只读守卫拒绝，因此整体 `status=partial` 属预期。
 - 输出：`$env:TEMP\demo_5c56458d\result.json`，`schema`、`dictionary`、`query_results` 均有内容。
-- `output_contract` 的三个键均非空；同一输入连续两次运行的 result.json 字节一致。
+- `output_contract` 的三个键均非空；`checks` 含 `possible_join_fanout` 与 `unit_conflict`；同一输入连续两次运行的 result.json 字节一致。
 
 > 数据库为合成样本，不代表任何真实研究或官方评测数据。
 
 ## 输入
 
-- `case.json`：`case_id`、`output_contract`；可选 `queries`（字符串或 `{sql, params, purpose}` 列表）、`database`、`question`、`max_rows`。
+- `case.json`：`case_id`、`output_contract`；可选 `queries`（字符串或 `{sql, params, purpose}` 列表）、`database`、`question`、`max_rows`。`question` 为空时回退读取同目录 `task.md`/`prompt.md`/`README.md` 或 `/input/task.md`。
 - 数据库：`input_dir`、`materials`、`database`、`path` 指定；回退 `/input` 扫描 `.sqlite`、`.sqlite3`、`.db`。
 - 输出：`/app/output/result.json`。
 
@@ -36,10 +36,10 @@ python scripts/run_skill.py --case examples/demo-case/case.json --out "$env:TEMP
 
 1. **连接（任务完成度）**：用 SQLite URI `mode=ro` 只读打开，校验 `PRAGMA query_only`；数据库不存在或非 SQLite 时记录错误，不尝试创建。
 2. **结构盘点（正确性）**：列出表、列、声明类型、主键、外键、索引与行数；空库也如实输出。
-3. **字段字典（完整性）**：为每列给出类型、可空性、去重值数、空值数与单位提示；从列名提取 `(...)` 单位，不做语义臆测。
+3. **字段字典（完整性）**：为每列给出类型、可空性、去重值数、空值数、单位提示与内联单位清单 `value_units`（只匹配“数值+单位”）；同一列出现 ≥2 种单位时记 `unit_conflict` 并不做换算。
 4. **查询执行（正确性）**：只允许 `SELECT`、`WITH`、`EXPLAIN`；拒绝 `INSERT/UPDATE/DELETE/DROP/ALTER/ATTACH/PRAGMA` 与多语句；每条结果限制行数并附 `sql`、`params`、`row_count`、`truncated`。
-5. **风险检查（可核验性）**：用 `EXPLAIN QUERY PLAN` 记录 `SCAN`/`SEARCH`；结果行数超过最大基表行数时标 `possible_join_fanout`；无索引扫描标 `full_scan`。
-6. **检索辅助（使用增益）**：把问题词与列名做词法匹配，给出候选列与参数化查询模板，明确标注为启发式建议，不冒充已执行结果。
+5. **风险检查（可核验性）**：用 `EXPLAIN QUERY PLAN` 记录扫描方式并把 `SCAN` 记为 `full_scan` 提示；含 JOIN 且无聚合时，若结果中的主键/外键列出现重复值（或行数超过最大基表行数）标 `possible_join_fanout`；混合单位标 `unit_conflict`。
+6. **检索辅助（使用增益）**：把问题词与列名做词法匹配；问题/任务提到 mean/average 且存在一对多时，给出“先按父键聚合子表再 JOIN”的模板，明确标注为启发式建议，不冒充已执行结果。
 7. **失败与恢复（可靠体验）**：SQL 语法错误、未知列、只读拒绝、行数截断分别进入 `errors`、`checks`，不返回伪造行。
 
 ## 输出契约
@@ -47,10 +47,10 @@ python scripts/run_skill.py --case examples/demo-case/case.json --out "$env:TEMP
 | 字段 | 含义 |
 |-|-|
 | `case_id` | 与输入一致 |
-| `output_contract` 各字段 | 命中别名时填真实值，否则 `null` + `contract_notes` |
+| `output_contract` 各字段 | 命中别名或关键字前缀时填真实值，否则 `null` + `contract_extras` |
 | `status` | `success` / `partial` / `insufficient_input` / `failed` |
-| `result` | `schema`、`dictionary`、`query_results`、`checks`、`suggested_queries` |
-| `evidence` | 数据库路径、大小、哈希、只读方式、执行上限 |
+| `result` | `schema`、`dictionary`、`query_results`、`checks`、`suggested_queries`、`task_summary` |
+| `evidence` | 数据库文件名（basename）、大小、哈希、只读方式、执行上限 |
 | `uncertainty` | 查询为词法建议、未做执行计划成本估算 |
 | `errors` / `stats` | 真实错误与计数 |
 
@@ -65,7 +65,8 @@ python scripts/run_skill.py --case examples/demo-case/case.json --out "$env:TEMP
 | 含写操作/多语句 | 拒绝执行并说明原因 | `partial` |
 | SQL 语法或未知列错误 | 记录错误文本与 SQL | `partial` |
 | 结果被行数截断 | `truncated=true` 并提示加 LIMIT | `partial` |
-| 疑似 JOIN 放大 | 标注 `possible_join_fanout` | `partial` |
+| 疑似 JOIN 放大 | 标注 `possible_join_fanout` 并给出先聚合后联表的建议 | `partial` |
+| 同一列出现多种单位 | 标注 `unit_conflict`，不代为换算 | `partial` |
 
 ## 限制
 
